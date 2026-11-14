@@ -1,5 +1,11 @@
 from rest_framework.permissions import BasePermission
 
+BUYER_ROLES = ("company_admin", "purchase")
+VENDOR_ROLES = ("company_admin", "sales")
+FINANCE_ROLES = ("company_admin", "finance")
+
+def has_role(user, *roles):
+    return user.is_superuser or user.groups.filter(name__in=roles).exists()
 
 class IsCompanyAdmin(BasePermission):
     def has_permission(self, request, view):

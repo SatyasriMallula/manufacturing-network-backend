@@ -1,13 +1,24 @@
-# core/responses.py
+
 from rest_framework.response import Response
 
 
-def success_response(message="Success", data=None, status_code=200):
-    return Response({
+def success_response(
+    message="Success",
+    data=None,
+    status_code=200,
+    **extra,
+):
+    response_data = {
         "success": True,
         "message": message,
-        "data": data,
-    }, status=status_code)
+    }
+
+    # Pagination metadata appears before data
+    response_data.update(extra)
+
+    response_data["data"] = data
+
+    return Response(response_data, status=status_code)
 
 
 def error_response(message="Something went wrong", errors=None, status_code=400):

@@ -5,10 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
-from core.permissions import HasPermission, IsCompanyAdminOrSuperuser
+from core.permissions import  IsCompanyAdminOrSuperuser
 from .serializers import MyTokenObtainPairSerializer,AddStaffSerializer, StafflistSerializer
 from core.responses import success_response,error_response
-from .models import User
+from .models import User  
+import uuid
+from core.pagination import StandardPagination
 
 def set_auth_cookies(response,access,refresh):
     response.set_cookie(
@@ -130,7 +132,7 @@ class MeView(APIView):
         
     
 class AddStaffView(APIView):
-    permission_classes = [IsAuthenticated,HasPermission ]
+    permission_classes = [IsAuthenticated, IsCompanyAdminOrSuperuser]
     required_permission = "users.add_user"
 
     def post(self, request):
@@ -142,44 +144,41 @@ class AddStaffView(APIView):
             data={
                 "id": str(user.id),
                 "email": user.email,
+                "organization": user.organization.name,
                 "roles": list(user.groups.values_list("name", flat=True)),
             },
             status_code=201,
         )
-        
+
 
 class StaffListView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdminOrSuperuser]
 
     def get(self, request):
+        staff = User.objects.select_related("organization").prefetch_related("groups")
 
         if request.user.is_superuser:
             organization_id = request.query_params.get("organization_id")
-
-            if not organization_id:
-                return success_response(
-                    message="organization_id is required for superuser",
-                    data=[]
-                )
-
-            staff = User.objects.filter(
-                organization_id=organization_id
-            ).order_by("-date_joined")
-
+            if organization_id:
+                try:
+                    uuid.UUID(organization_id)
+                except ValueError:
+                    return success_response(message="Invalid organization_id", data=None, status_code=400)
+                staff = staff.filter(organization_id=organization_id)
         else:
             if not request.user.organization:
-                return success_response(
-                    message="No organization linked to this user",
-                    data=[]
-                )
+                return success_response(message="No organization linked to this user", data=[])
+            staff = staff.filter(organization=request.user.organization)
 
-            staff = User.objects.filter(
-                organization=request.user.organization
-            ).order_by("-date_joined")
+        staff = staff.order_by("-date_joined")
 
-        serializer = StafflistSerializer(staff, many=True)
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(staff, request)
+        serializer = StafflistSerializer(page, many=True)
 
         return success_response(
             message="Staff fetched successfully",
-            data=serializer.data
+            **paginator.get_pagination_meta(),
+            data=serializer.data,
+
         )
