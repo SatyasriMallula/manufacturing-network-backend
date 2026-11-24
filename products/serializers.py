@@ -13,18 +13,20 @@ def _review_stats(product):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    organization_name = serializers.CharField(source="organization.name", read_only=True)
     average_rating = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
-            "id", "name", "sku", "category", "sub_category", "description", "organization",
-            "materials", "manufacturing_processes", "certifications", "tolerance",
-            "minimum_order_quantity", "unit_of_measurement", "typical_lead_time_days",
-            "status", "average_rating", "review_count", "created_at", "updated_at",
+            "id", "organization", "organization_name", "name", "sku", "category",
+            "sub_category", "description", "materials", "manufacturing_processes",
+            "certifications", "tolerance", "minimum_order_quantity",
+            "unit_of_measurement", "typical_lead_time_days", "status",
+            "average_rating", "review_count", "created_at", "updated_at",
         ]
-        read_only_fields = ["id",  "created_at", "updated_at"]
+        read_only_fields = ["id", "organization", "created_at", "updated_at"]  
         
     def validate_status(self, value):
         allowed = [Product.Status.ACTIVE, Product.Status.INACTIVE, Product.Status.DRAFT]
