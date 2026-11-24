@@ -35,7 +35,7 @@ class OrganizationListCreateView(APIView):
 
 
 class OrganizationDetailView(APIView):
-    """Any logged-in user: public profile — name, products, rating.
+    """Any logged-in user: public profile — name, components, rating.
     This replaces the old separate OrganizationProfileView entirely."""
     permission_classes = [IsAuthenticated]
 

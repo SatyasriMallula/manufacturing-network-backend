@@ -5,9 +5,9 @@ from rest_framework.permissions import IsAuthenticated
 from core.responses import success_response
 from core.pagination import StandardPagination
 from core.permissions import IsCompanyAdmin, IsCompanyAdminOrSuperuser
-from .models import Product, ProductImage, ProductDocument, ProductDocumentAccess
+from .models import Component, ComponentImage, ComponentDocument, ComponentDocumentAccess
 from .serializers import (
-    ProductSerializer, ProductImageSerializer, ProductDocumentSerializer,
+    ComponentSerializer, ComponentImageSerializer, ComponentDocumentSerializer,
      
 )
 from django.utils import timezone
@@ -22,24 +22,24 @@ from orders.serializers import OrderReviewSerializer
 from core.pagination import StandardPagination
 
 
-def visible_documents(product, user):
-    docs = product.documents.all()
-    if user.is_superuser or user.organization_id == product.organization_id:
+def visible_documents(component, user):
+    docs = component.documents.all()
+    if user.is_superuser or user.organization_id == component.organization_id:
         return docs
     return docs.filter(
-        Q(access_level=ProductDocument.AccessLevel.PUBLIC)
+        Q(access_level=ComponentDocument.AccessLevel.PUBLIC)
         | Q(access_grants__granted_to_organization_id=user.organization_id,
             access_grants__is_revoked=False)
     ).distinct()
 
 
 
-class ProductReviewListView(APIView):
+class ComponentReviewListView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id)
-        reviews = OrderReview.objects.filter(order__product=product).select_related(
+    def get(self, request, component_id):
+        component = get_object_or_404(Component, id=component_id)
+        reviews = OrderReview.objects.filter(order__component=component).select_related(
             "order__buyer_organization", "reviewed_by"
         )
         paginator = StandardPagination()
@@ -50,165 +50,165 @@ class ProductReviewListView(APIView):
             **paginator.get_pagination_meta(),
         )
 
-class PublicProductListView(APIView):
-    """Any logged-in user can browse active products across all vendors."""
+class PublicComponentListView(APIView):
+    """Any logged-in user can browse active components across all vendors."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        products = Product.objects.filter(
-    status=Product.Status.ACTIVE,
+        components = Component.objects.filter(
+    status=Component.Status.ACTIVE,
     organization__compliance_info__verification_status="verified",
 ).annotate(avg_rating=Avg("orders__review__rating"), num_reviews=Count("orders__review"))
 
         params = request.query_params
 
         if params.get("organization"):
-            products = products.filter(organization_id=params["organization"])
+            components = components.filter(organization_id=params["organization"])
         if params.get("category"):
-            products = products.filter(category__icontains=params["category"])
+            components = components.filter(category__icontains=params["category"])
         if params.get("material"):
-            products = products.filter(materials__icontains=params["material"])
+            components = components.filter(materials__icontains=params["material"])
         if params.get("process"):
-            products = products.filter(manufacturing_processes__icontains=params["process"])
+            components = components.filter(manufacturing_processes__icontains=params["process"])
         if params.get("certification"):
-            products = products.filter(certifications__icontains=params["certification"])
+            components = components.filter(certifications__icontains=params["certification"])
         if params.get("min_rating"):
-            products = products.filter(avg_rating__gte=params["min_rating"])
+            components = components.filter(avg_rating__gte=params["min_rating"])
         if params.get("search"):
             term = params["search"]
-            products = products.filter(
+            components = components.filter(
                 Q(name__icontains=term) | Q(description__icontains=term) | Q(sku__icontains=term)
             )
 
         ordering = params.get("ordering", "-created_at")
         if ordering in ["-created_at", "name", "-avg_rating", "typical_lead_time_days"]:
-            products = products.order_by(ordering)
+            components = components.order_by(ordering)
 
         paginator = StandardPagination()
-        page = paginator.paginate_queryset(products, request)
-        serializer = ProductSerializer(page, many=True)
+        page = paginator.paginate_queryset(components, request)
+        serializer = ComponentSerializer(page, many=True)
 
         return success_response(
-            message="Products fetched",
+            message="Components fetched",
             **paginator.get_pagination_meta(),
             data=serializer.data,
            
         )
 
-# ---------- Product CRUD (Company Admin, own org only) ----------
+# ---------- Component CRUD (Company Admin, own org only) ----------
 
-class MyProductListCreateView(APIView):
+class MyComponentListCreateView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdminOrSuperuser,]
 
     def get(self, request):
-        products = Product.objects.filter(organization=request.user.organization).order_by("-created_at")
-        return success_response(message="Products fetched", data=ProductSerializer(products, many=True).data)
+        components = Component.objects.filter(organization=request.user.organization).order_by("-created_at")
+        return success_response(message="Components fetched", data=ComponentSerializer(components, many=True).data)
 
     def post(self, request):
-        serializer = ProductSerializer(data=request.data)
+        serializer = ComponentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        product = serializer.save(organization=request.user.organization)
+        component = serializer.save(organization=request.user.organization)
         return success_response(
-            message="Product added successfully",
-            data=ProductSerializer(product).data,
+            message="Component added successfully",
+            data=ComponentSerializer(component).data,
             status_code=201,
         )
 
 
-class MyProductDetailView(APIView):
+class MyComponentDetailView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdmin]
 
-    def get_object(self, request, product_id):
-        return get_object_or_404(Product, id=product_id, organization=request.user.organization)
+    def get_object(self, request, component_id):
+        return get_object_or_404(Component, id=component_id, organization=request.user.organization)
     
-    def get(self, request, product_id):
-        product = self.get_object(request, product_id)
-        serializer = ProductSerializer(product)
-        return success_response(message="Product fetched", data=serializer.data)
+    def get(self, request, component_id):
+        component = self.get_object(request, component_id)
+        serializer = ComponentSerializer(component)
+        return success_response(message="Component fetched", data=serializer.data)
 
-    def patch(self, request, product_id):
-        product = self.get_object(request, product_id)
-        serializer = ProductSerializer(product, data=request.data, partial=True)
+    def patch(self, request, component_id):
+        component = self.get_object(request, component_id)
+        serializer = ComponentSerializer(component, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return success_response(message="Product updated", data=serializer.data)
+        return success_response(message="Component updated", data=serializer.data)
 
-    def delete(self, request, product_id):
-        product = self.get_object(request, product_id)
-        product.delete()
-        return success_response(message="Product deleted", data=None)
+    def delete(self, request, component_id):
+        component = self.get_object(request, component_id)
+        component.delete()
+        return success_response(message="Component deleted", data=None)
 
 
-# ---------- Product Images (Company Admin, own org only) ----------
+# ---------- Component Images (Company Admin, own org only) ----------
 
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 
-class ProductImageListCreateView(APIView):
+class ComponentImageListCreateView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
-    def get(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id, organization=request.user.organization)
+    def get(self, request, component_id):
+        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
         return success_response(
-            data=ProductImageSerializer(product.images.all(), many=True, context={"request": request}).data
+            data=ComponentImageSerializer(component.images.all(), many=True, context={"request": request}).data
         )
 
-    def post(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id, organization=request.user.organization)
-        serializer = ProductImageSerializer(data=request.data, context={"request": request})
+    def post(self, request, component_id):
+        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
+        serializer = ComponentImageSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        image = serializer.save(product=product, uploaded_by=request.user)
+        image = serializer.save(component=component, uploaded_by=request.user)
         return success_response(
             message="Image uploaded successfully",
-            data=ProductImageSerializer(image, context={"request": request}).data,
+            data=ComponentImageSerializer(image, context={"request": request}).data,
             status_code=201,
         )
 
 
-class ProductImageDeleteView(APIView):
+class ComponentImageDeleteView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdmin]
 
-    def delete(self, request, product_id, image_id):
+    def delete(self, request, component_id, image_id):
         image = get_object_or_404(
-            ProductImage, id=image_id, product_id=product_id,
-            product__organization=request.user.organization,
+            ComponentImage, id=image_id, component_id=component_id,
+            component__organization=request.user.organization,
         )
         image.image.delete(save=False)   # works for local + S3
         image.delete()
         return success_response(message="Image deleted", data=None)
 
-# ---------- Product Documents (Company Admin, own org only) ----------
-class ProductDocumentListCreateView(APIView):
+# ---------- Component Documents (Company Admin, own org only) ----------
+class ComponentDocumentListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id)
-        docs = visible_documents(product, request.user)
-        return success_response(data=ProductDocumentSerializer(docs, many=True).data)
+    def get(self, request, component_id):
+        component = get_object_or_404(Component, id=component_id)
+        docs = visible_documents(component, request.user)
+        return success_response(data=ComponentDocumentSerializer(docs, many=True).data)
 
-    def post(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id, organization=request.user.organization)
+    def post(self, request, component_id):
+        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
         if not has_role(request.user, "company_admin"):
             return success_response(message="Only Company Admin can upload documents", data=None, status_code=403)
 
-        serializer = ProductDocumentSerializer(data=request.data)
+        serializer = ComponentDocumentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        doc = serializer.save(product=product, uploaded_by=request.user)
+        doc = serializer.save(component=component, uploaded_by=request.user)
         return success_response(
             message="Document uploaded successfully",
-            data=ProductDocumentSerializer(doc).data,
+            data=ComponentDocumentSerializer(doc).data,
             status_code=201,
         )
 
 
-class ProductDocumentDeleteView(APIView):
+class ComponentDocumentDeleteView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdmin]
 
-    def delete(self, request, product_id, document_id):
+    def delete(self, request, component_id, document_id):
         doc = get_object_or_404(
-            ProductDocument, id=document_id, product_id=product_id,
-            product__organization=request.user.organization,
+            ComponentDocument, id=document_id, component_id=component_id,
+            component__organization=request.user.organization,
         )
         doc.file.delete(save=False)   # works for local + S3
         doc.delete()
@@ -220,8 +220,8 @@ class DocumentAccessListGrantView(APIView):
     def get(self, request, document_id):
         """List everyone who currently has access to this document. Owner only."""
         document = get_object_or_404(
-            ProductDocument, id=document_id,
-            product__organization=request.user.organization,
+            ComponentDocument, id=document_id,
+            component__organization=request.user.organization,
         )
         grants = document.access_grants.filter(is_revoked=False)
         data = [
@@ -240,7 +240,8 @@ class DocumentAccessListGrantView(APIView):
 
     def post(self, request, document_id):
         document = get_object_or_404(
-            ProductDocument, id=document_id, product__organization=request.user.organization,
+            ComponentDocument, id=document_id,
+            component__organization=request.user.organization,
         )
         try:
             rfq_id = uuid.UUID(str(request.data.get("rfq_id")))
@@ -261,12 +262,12 @@ class DocumentAccessListGrantView(APIView):
         if not (live_recipient and live_rfq):
             return success_response(message="This RFQ is no longer active for you", data=None, status_code=400)
 
-        access, _ = ProductDocumentAccess.objects.update_or_create(
+        access, _ = ComponentDocumentAccess.objects.update_or_create(
             document=document,
             granted_to_organization=rfq.buyer_organization,
             defaults={
                 "granted_by": request.user, "rfq": rfq,
-                "decision": ProductDocumentAccess.Decision.PENDING, "decided_at": None,
+                "decision": ComponentDocumentAccess.Decision.PENDING, "decided_at": None,
                 "keep_until_completion": False, "is_revoked": False, "revoked_at": None,
             },
         )
@@ -283,7 +284,7 @@ class DocumentAccessActionView(APIView):
             return success_response(message="organization_id and action are required", data=None, status_code=400)
 
         access = get_object_or_404(
-            ProductDocumentAccess,
+            ComponentDocumentAccess,
             document_id=document_id,
             granted_to_organization_id=org_id,
             is_revoked=False,
@@ -295,8 +296,8 @@ class DocumentAccessActionView(APIView):
                 return success_response(message="Not allowed", data=None, status_code=403)
 
             access.decision = (
-                ProductDocumentAccess.Decision.CONFIRMED if action == "confirm"
-                else ProductDocumentAccess.Decision.REJECTED
+                ComponentDocumentAccess.Decision.CONFIRMED if action == "confirm"
+                else ComponentDocumentAccess.Decision.REJECTED
             )
             access.decided_at = timezone.now()
             if action == "reject":
@@ -307,7 +308,7 @@ class DocumentAccessActionView(APIView):
 
         # vendor actions
         elif action in ["revoke", "keep_until_completion"]:
-            if request.user.organization_id != access.document.product.organization_id:
+            if request.user.organization_id != access.document.component.organization_id:
                 return success_response(message="Not allowed", data=None, status_code=403)
 
             if action == "revoke":

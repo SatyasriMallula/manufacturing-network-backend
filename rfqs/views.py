@@ -13,7 +13,7 @@ import uuid
 from datetime import date
 from orders.services import create_order_from_award
 from notifications import events
-from products.services import revoke_for_rfq_awarded, revoke_for_rfq_cancelled
+from components.services import revoke_for_rfq_awarded, revoke_for_rfq_cancelled
 
 ALLOWED_TRANSITIONS = {
     "draft": {"open", "cancelled"},
@@ -41,7 +41,7 @@ class RFQListCreateView(APIView):
         rfqs = (
             rfqs_visible_to(request.user)
             .select_related("buyer_organization")
-            .prefetch_related("recipients__vendor_organization", "recipients__product", "attachments")
+            .prefetch_related("recipients__vendor_organization", "recipients__component", "attachments")
         )
         org = request.user.organization
         params = request.query_params

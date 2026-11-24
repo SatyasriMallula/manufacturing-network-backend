@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('organizations', '0003_organizationcomplianceinfo'),
-        ('products', '0003_rename_confirmed_at_productdocumentaccess_decided_at_and_more'),
+        ('components', '0003_rename_confirmed_at_productdocumentaccess_decided_at_and_more'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -55,7 +55,7 @@ class Migration(migrations.Migration):
                 ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
                 ('status', models.CharField(choices=[('sent', 'Sent'), ('viewed', 'Viewed'), ('quoted', 'Quoted'), ('declined', 'Declined')], default='sent', max_length=20)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('product', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='rfq_recipients', to='products.product')),
+                ('product', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='rfq_recipients', to='components.product')),
                 ('rfq', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='recipients', to='rfqs.rfq')),
                 ('vendor_organization', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='rfqs_received', to='organizations.organization')),
             ],

@@ -8,7 +8,7 @@ def create_order_from_award(rfq, recipient, created_by):
         quote=quote,
         buyer_organization=rfq.buyer_organization,
         vendor_organization=recipient.vendor_organization,
-        product=recipient.product,
+        component=recipient.component,
         created_by=created_by,
         title=rfq.title,
         quantity=rfq.quantity,

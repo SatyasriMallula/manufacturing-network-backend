@@ -46,6 +46,7 @@ class LoginView(TokenObtainPairView):
         )
         
         set_auth_cookies(response, str(data["access"]), str(data["refresh"]))
+        print("LOGIN RESPONSE COOKIES:", response.cookies)
         return response
     
     

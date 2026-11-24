@@ -5,7 +5,7 @@ from rest_framework import serializers
 from django.utils import timezone
 
 from organizations.models import Organization
-from products.models import Product
+from components.models import Component
 
 from decimal import Decimal
 from .models import RFQ, RFQRecipient, RFQAttachment, Quote
@@ -19,17 +19,17 @@ class RFQAttachmentSerializer(serializers.ModelSerializer):
 
 class RFQRecipientSerializer(serializers.ModelSerializer):
     vendor_organization_name = serializers.CharField(source="vendor_organization.name", read_only=True)
-    product_name = serializers.CharField(source="product.name", read_only=True, default=None)
+    component_name = serializers.CharField(source="component.name", read_only=True, default=None)
 
     class Meta:
         model = RFQRecipient
-        fields = ["id", "vendor_organization", "vendor_organization_name", "product", "product_name", "status"]
+        fields = ["id", "vendor_organization", "vendor_organization_name", "component", "component_name", "status"]
         read_only_fields = fields
 
 
 class RFQVendorInputSerializer(serializers.Serializer):
     vendor_organization = serializers.UUIDField()
-    product = serializers.UUIDField(required=False, allow_null=True)
+    component = serializers.UUIDField(required=False, allow_null=True)
 
 
 class RFQSerializer(serializers.ModelSerializer):
@@ -52,7 +52,7 @@ class RFQSerializer(serializers.ModelSerializer):
 
     def get_recipients(self, obj):
         request = self.context["request"]
-        recipients = obj.recipients.select_related("vendor_organization", "product")
+        recipients = obj.recipients.select_related("vendor_organization", "component")
         # Vendors only see their own entry, never the other invited vendors.
         if not request.user.is_superuser and request.user.organization_id != obj.buyer_organization_id:
             recipients = recipients.filter(vendor_organization_id=request.user.organization_id)
@@ -89,12 +89,12 @@ class RFQSerializer(serializers.ModelSerializer):
 ).exists():
                 raise serializers.ValidationError(f"Vendor {vendor_id} does not exist or is not verified.")
 
-            product_id = item.get("product")
-            if product_id and not Product.objects.filter(
-                id=product_id, organization_id=vendor_id, status=Product.Status.ACTIVE
+            component_id = item.get("component")
+            if component_id and not Component.objects.filter(
+                id=component_id, organization_id=vendor_id, status=Component.Status.ACTIVE
             ).exists():
                 raise serializers.ValidationError(
-                    f"Product {product_id} is not an active product of vendor {vendor_id}."
+                    f"Component {component_id} is not an active component of vendor {vendor_id}."
                 )
         return value
 
@@ -107,7 +107,7 @@ class RFQSerializer(serializers.ModelSerializer):
 
     def _save_recipients(self, rfq, vendors):
         RFQRecipient.objects.bulk_create([
-            RFQRecipient(rfq=rfq, vendor_organization_id=v["vendor_organization"], product_id=v.get("product"))
+            RFQRecipient(rfq=rfq, vendor_organization_id=v["vendor_organization"], component_id=v.get("component"))
             for v in vendors
         ])
 
