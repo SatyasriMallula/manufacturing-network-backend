@@ -2,7 +2,6 @@ from django.db.models import Avg
 from rest_framework import serializers
 
 from .models import Organization, OrganizationComplianceInfo
-from products.serializers import ProductSerializer
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -18,21 +17,21 @@ from django.db.models import Avg, Count
 from rest_framework import serializers
 
 from orders.models import OrderReview
-from products.models import Product
+from components.models import Component
 
 
 class OrganizationProfileSerializer(serializers.ModelSerializer):
     is_verified = serializers.BooleanField(read_only=True)
     overall_rating = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
-    product_count = serializers.SerializerMethodField()
+    component_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
         fields = [
             "id", "name", "description", "website", "year_established",
             "address_city", "address_state", "address_country", "created_at",
-            "is_verified", "overall_rating", "review_count", "product_count",
+            "is_verified", "overall_rating", "review_count", "component_count",
         ]
 
     def _stats(self, obj):
@@ -49,8 +48,8 @@ class OrganizationProfileSerializer(serializers.ModelSerializer):
     def get_review_count(self, obj):
         return self._stats(obj)["n"]
 
-    def get_product_count(self, obj):
-        return Product.objects.filter(organization=obj, status=Product.Status.ACTIVE).count()
+    def get_component_count(self, obj):
+        return Component.objects.filter(organization=obj, status=Component.Status.ACTIVE).count()
 
 
 class OrganizationUpdateSerializer(serializers.ModelSerializer):

@@ -84,8 +84,8 @@ class RFQRecipient(models.Model):
     vendor_organization = models.ForeignKey(
         "organizations.Organization", on_delete=models.PROTECT, related_name="rfqs_received"
     )
-    product = models.ForeignKey(
-        "products.Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="rfq_recipients"
+    component = models.ForeignKey(
+        "components.Component", on_delete=models.SET_NULL, null=True, blank=True, related_name="rfq_recipients"
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SENT)
     created_at = models.DateTimeField(auto_now_add=True)

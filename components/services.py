@@ -1,6 +1,6 @@
 from django.utils import timezone
 
-from .models import ProductDocumentAccess
+from .models import ComponentDocumentAccess
 
 
 def _revoke(qs):
@@ -9,22 +9,22 @@ def _revoke(qs):
 
 def revoke_for_rfq_cancelled(rfq):
     """RFQ cancelled: nobody keeps access."""
-    return _revoke(ProductDocumentAccess.objects.filter(rfq=rfq))
+    return _revoke(ComponentDocumentAccess.objects.filter(rfq=rfq))
 
 
 def revoke_for_rfq_awarded(rfq, winner_vendor_org_id):
     """RFQ awarded: vendors who lost no longer share drawings with this buyer."""
     return _revoke(
-        ProductDocumentAccess.objects.filter(rfq=rfq).exclude(
-            document__product__organization_id=winner_vendor_org_id
+        ComponentDocumentAccess.objects.filter(rfq=rfq).exclude(
+            document__component__organization_id=winner_vendor_org_id
         )
     )
 
 
 def release_for_order_end(order):
     """Order completed: revoke 'keep until completion' grants. Order cancelled: revoke all."""
-    qs = ProductDocumentAccess.objects.filter(
-        rfq=order.rfq, document__product__organization=order.vendor_organization
+    qs = ComponentDocumentAccess.objects.filter(
+        rfq=order.rfq, document__component__organization=order.vendor_organization
     )
     if order.status != "completed":
         return _revoke(qs)

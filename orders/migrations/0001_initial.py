@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('organizations', '0003_organizationcomplianceinfo'),
-        ('products', '0003_rename_confirmed_at_productdocumentaccess_decided_at_and_more'),
+        ('components', '0003_rename_confirmed_at_productdocumentaccess_decided_at_and_more'),
         ('rfqs', '0005_remove_quote_decided_at_remove_quote_status'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('buyer_organization', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='purchase_orders', to='organizations.organization')),
                 ('created_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='orders_created', to=settings.AUTH_USER_MODEL)),
-                ('product', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='orders', to='products.product')),
+                ('product', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='orders', to='components.product')),
                 ('quote', models.OneToOneField(on_delete=django.db.models.deletion.PROTECT, related_name='order', to='rfqs.quote')),
                 ('rfq', models.OneToOneField(on_delete=django.db.models.deletion.PROTECT, related_name='order', to='rfqs.rfq')),
                 ('vendor_organization', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='sales_orders', to='organizations.organization')),

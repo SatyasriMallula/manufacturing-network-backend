@@ -76,7 +76,7 @@ INSTALLED_APPS = [
     "core",
     "users",
     "organizations",
-    "products",
+    "components.apps.ComponentsConfig",
     "storages",
     "rfqs",
     "orders",

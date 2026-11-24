@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('organizations', '0002_organizationreview'),
-        ('products', '0002_productdocument_file_productdocument_title_and_more'),
+        ('components', '0002_productdocument_file_productdocument_title_and_more'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

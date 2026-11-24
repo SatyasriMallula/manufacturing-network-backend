@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('products', '0003_rename_confirmed_at_productdocumentaccess_decided_at_and_more'),
+        ('components', '0003_rename_confirmed_at_productdocumentaccess_decided_at_and_more'),
         ('rfqs', '0005_remove_quote_decided_at_remove_quote_status'),
     ]
 

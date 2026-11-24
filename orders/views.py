@@ -12,7 +12,7 @@ from .models import Order, OrderStatusHistory, OrderReview
 from .serializers import OrderSerializer, OrderDetailSerializer, OrderReviewSerializer
 from .workflow import ACTIONS, actor_allowed
 from notifications import events
-from products.services import release_for_order_end
+from components.services import release_for_order_end
 from billing.models import Invoice, Payment
 from django.db import IntegrityError
 from core.permissions import has_role, BUYER_ROLES
@@ -31,7 +31,7 @@ class OrderListView(APIView):
 
     def get(self, request):
         orders = orders_visible_to(request.user).select_related(
-            "rfq", "buyer_organization", "vendor_organization", "product", "review"
+            "rfq", "buyer_organization", "vendor_organization", "component", "review"
         )
         org = request.user.organization
         params = request.query_params
@@ -59,7 +59,7 @@ class OrderDetailView(APIView):
     def get(self, request, order_id):
         order = get_object_or_404(
             orders_visible_to(request.user).select_related(
-                "rfq", "buyer_organization", "vendor_organization", "product", "review"
+                "rfq", "buyer_organization", "vendor_organization", "component", "review"
             ).prefetch_related("history__changed_by"),
             id=order_id,
         )
@@ -121,7 +121,7 @@ class OrderDetailView(APIView):
             events.order_updated(order, old_status, request.user, note)
 
         order = get_object_or_404(
-            Order.objects.select_related("rfq", "buyer_organization", "vendor_organization", "product")
+            Order.objects.select_related("rfq", "buyer_organization", "vendor_organization", "component")
             .prefetch_related("history__changed_by"),
             id=order.id,
         )

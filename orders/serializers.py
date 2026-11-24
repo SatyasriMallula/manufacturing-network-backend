@@ -25,7 +25,7 @@ class OrderSerializer(serializers.ModelSerializer):
     rfq_number = serializers.CharField(source="rfq.rfq_number", read_only=True)
     buyer_organization_name = serializers.CharField(source="buyer_organization.name", read_only=True)
     vendor_organization_name = serializers.CharField(source="vendor_organization.name", read_only=True)
-    product_name = serializers.CharField(source="product.name", read_only=True, default=None)
+    component_name = serializers.CharField(source="component.name", read_only=True, default=None)
     available_actions = serializers.SerializerMethodField()
     can_review = serializers.SerializerMethodField()
 
@@ -35,7 +35,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "id", "order_number", "rfq", "rfq_number", "title",
             "buyer_organization", "buyer_organization_name",
             "vendor_organization", "vendor_organization_name",
-            "product", "product_name",
+            "component", "component_name",
             "quantity", "unit_of_measurement", "unit_price", "total_price", "currency",
             "delivery_days", "expected_delivery_date",
             "status", "shipping_reference", "cancellation_reason",

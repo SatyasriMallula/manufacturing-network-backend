@@ -4,7 +4,7 @@ from django.db import models
 from organizations.models import Organization
 
 
-class Product(models.Model):
+class Component(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         PENDING_REVIEW = "pending_review", "Pending Review"
@@ -40,12 +40,15 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        db_table = "components"
+
     def __str__(self):
         return f"{self.name} ({self.organization.name})"
 
 
 # catalog/models.py
-class ProductImage(models.Model):
+class ComponentImage(models.Model):
     class Status(models.TextChoices):
         UPLOADING = "uploading", "Uploading"
         PROCESSING = "processing", "Processing"
@@ -53,7 +56,7 @@ class ProductImage(models.Model):
         FAILED = "failed", "Failed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
+    component = models.ForeignKey(Component, on_delete=models.CASCADE, related_name="images")
     uploaded_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True)
 
     original_filename = models.CharField(max_length=255)
@@ -74,11 +77,12 @@ class ProductImage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        db_table = "component_images"
         ordering = ["display_order", "created_at"]
 
 
 
-class ProductDocument(models.Model):
+class ComponentDocument(models.Model):
     class DocType(models.TextChoices):
         DRAWING = "drawing", "Engineering Drawing"
         SPEC_SHEET = "spec_sheet", "Spec Sheet"
@@ -93,7 +97,7 @@ class ProductDocument(models.Model):
         REJECTED = "rejected", "Rejected (virus/policy)"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="documents")
+    component = models.ForeignKey(Component, on_delete=models.CASCADE, related_name="documents")
     uploaded_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True)
 
     doc_type = models.CharField(max_length=20, choices=DocType.choices)
@@ -107,9 +111,12 @@ class ProductDocument(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.UPLOADING)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "component_documents"
     
 
-class ProductDocumentAccess(models.Model):
+class ComponentDocumentAccess(models.Model):
     class Decision(models.TextChoices):
         PENDING = "pending", "Pending"
         CONFIRMED = "confirmed", "Confirmed by buyer"
@@ -117,7 +124,7 @@ class ProductDocumentAccess(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # ← this line was likely missing
 
-    document = models.ForeignKey(ProductDocument, on_delete=models.CASCADE, related_name="access_grants")
+    document = models.ForeignKey(ComponentDocument, on_delete=models.CASCADE, related_name="access_grants")
     granted_to_organization = models.ForeignKey("organizations.Organization", on_delete=models.CASCADE)
     granted_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True)
     granted_at = models.DateTimeField(auto_now_add=True)

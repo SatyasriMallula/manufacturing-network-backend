@@ -24,8 +24,8 @@ class Order(models.Model):
     vendor_organization = models.ForeignKey(
         "organizations.Organization", on_delete=models.PROTECT, related_name="sales_orders"
     )
-    product = models.ForeignKey(
-        "products.Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="orders"
+    component = models.ForeignKey(
+        "components.Component", on_delete=models.SET_NULL, null=True, blank=True, related_name="orders"
     )
     created_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, related_name="orders_created")
 
