@@ -1,3 +1,5 @@
+from urllib import request
+
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -7,7 +9,7 @@ from core.pagination import StandardPagination
 from core.permissions import IsCompanyAdmin, IsCompanyAdminOrSuperuser
 from .models import Component, ComponentImage, ComponentDocument, ComponentDocumentAccess
 from .serializers import (
-    ComponentSerializer, ComponentImageSerializer, ComponentDocumentSerializer,
+    ComponentSerializer
      
 )
 from django.utils import timezone
@@ -21,17 +23,195 @@ from orders.models import OrderReview
 from orders.serializers import OrderReviewSerializer
 from core.pagination import StandardPagination
 
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
-def visible_documents(component, user):
-    docs = component.documents.all()
+from core.permissions import has_role
+from core.responses import error_response, success_response
+from uploads import services
+from uploads.models import FileAsset
+from uploads.policies import REGISTRY
+from .models import Component, ComponentDocument, ComponentDocumentAccess, ComponentImage
+from .serializers import AttachDocumentSerializer, AttachImageSerializer
+from uploads import s3  
+from django.db.models import F
+
+
+DOC_CATEGORIES = [FileAsset.Category.DRAWING, FileAsset.Category.SPECIFICATION, FileAsset.Category.OTHER]
+
+
+def _not_admin(request):
+    if not has_role(request.user, "company_admin"):
+        return error_response("Not allowed", status_code=403)
+
+
+def _image_data(image):
+    asset = image.file_asset
+    return {
+        "id": str(image.id),
+        "file_asset_id": str(image.file_asset_id) if image.file_asset_id else None,
+        "filename": asset.original_filename if asset else None,
+        "size_bytes": asset.size_bytes if asset else None,
+        "is_primary": image.is_primary, "display_order": image.display_order, "created_at": image.created_at,
+    }
+
+
+def _document_data(doc):
+    asset = doc.file_asset
+    return {
+        "id": str(doc.id),
+        "file_asset_id": str(doc.file_asset_id) if doc.file_asset_id else None,
+        "doc_type": doc.doc_type, "title": doc.title,
+        "filename": asset.original_filename if asset else None,
+        "size_bytes": asset.size_bytes if asset else None,
+        "created_at": doc.created_at,
+    }
+
+
+def _visible_documents(component, user):
+    docs = component.documents.select_related("file_asset")
     if user.is_superuser or user.organization_id == component.organization_id:
         return docs
-    return docs.filter(
-        Q(access_level=ComponentDocument.AccessLevel.PUBLIC)
-        | Q(access_grants__granted_to_organization_id=user.organization_id,
-            access_grants__is_revoked=False)
-    ).distinct()
+    granted = ComponentDocumentAccess.objects.filter(
+        granted_to_organization_id=user.organization_id, is_revoked=False,
+    ).exclude(decision=ComponentDocumentAccess.Decision.REJECTED)
+    return docs.filter(access_grants__in=granted).distinct()
 
+class ComponentImageListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, component_id):
+        denied = _not_admin(request)
+        if denied:
+            return denied
+        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
+        images = component.images.select_related("file_asset")
+        return success_response(data=[_image_data(i) for i in images])
+
+    def post(self, request, component_id):
+        denied = _not_admin(request)
+        if denied:
+            return denied
+        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
+        serializer = AttachImageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        asset = FileAsset.objects.active().filter(
+            id=data["file_asset_id"], organization=request.user.organization,
+            component=component, category=FileAsset.Category.IMAGE,
+        ).first()
+        if asset is None:
+            return error_response("File not found for this component", status_code=400)
+        if ComponentImage.objects.filter(file_asset=asset).exists():
+            return error_response("This file is already attached", status_code=400)
+
+        with transaction.atomic():
+            is_primary = data["is_primary"] or not component.images.exists()   # the first image becomes the main one
+            if is_primary:
+                component.images.filter(is_primary=True).update(is_primary=False)
+            image = ComponentImage.objects.create(
+                component=component, uploaded_by=request.user, file_asset=asset,
+                is_primary=is_primary,
+                display_order=data["display_order"], status=ComponentImage.Status.READY,
+            )
+        return success_response(message="Image added", data=_image_data(image), status_code=201)
+
+
+class ComponentImageDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _image(self, request, component_id, image_id):
+        return get_object_or_404(
+            ComponentImage.objects.select_related("file_asset"),
+            id=image_id, component_id=component_id,
+            component__organization=request.user.organization,
+        )
+
+    def patch(self, request, component_id, image_id):
+        denied = _not_admin(request)
+        if denied:
+            return denied
+        image = self._image(request, component_id, image_id)
+        serializer = AttachImageSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        with transaction.atomic():
+            if data.get("is_primary"):
+                image.component.images.exclude(pk=image.pk).update(is_primary=False)
+                image.is_primary = True
+            if "display_order" in data:
+                image.display_order = data["display_order"]
+            image.save(update_fields=["is_primary", "display_order"])
+        return success_response(message="Image updated", data=_image_data(image))
+
+    def delete(self, request, component_id, image_id):
+        denied = _not_admin(request)
+        if denied:
+            return denied
+        image = self._image(request, component_id, image_id)
+        if image.file_asset_id:
+            services.delete_file_asset(image.file_asset)   # also removes this row
+        else:
+            image.delete()                                  # an old image with no FileAsset
+        return success_response(message="Image deleted", data=None)
+
+
+class ComponentDocumentListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, component_id):
+        component = REGISTRY["component"].get_parent(request.user, component_id)
+        if component is None:
+            return error_response("Not found", status_code=404)
+        docs = _visible_documents(component, request.user)
+        return success_response(data=[_document_data(d) for d in docs])
+
+    def post(self, request, component_id):
+        denied = _not_admin(request)
+        if denied:
+            return denied
+        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
+        serializer = AttachDocumentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        asset = FileAsset.objects.active().filter(
+            id=data["file_asset_id"], organization=request.user.organization,
+            component=component, category__in=DOC_CATEGORIES,
+        ).first()
+        if asset is None:
+            return error_response("File not found for this component", status_code=400)
+        if ComponentDocument.objects.filter(file_asset=asset).exists():
+            return error_response("This file is already attached", status_code=400)
+
+        doc = ComponentDocument.objects.create(
+            component=component, uploaded_by=request.user, file_asset=asset,
+            doc_type=data["doc_type"], title=data["title"],
+            status=ComponentDocument.Status.READY,
+        )
+        return success_response(message="Document added", data=_document_data(doc), status_code=201)
+
+
+class ComponentDocumentDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, component_id, document_id):
+        denied = _not_admin(request)
+        if denied:
+            return denied
+        doc = get_object_or_404(
+            ComponentDocument, id=document_id, component_id=component_id,
+            component__organization=request.user.organization,
+        )
+        if doc.file_asset_id:
+            services.delete_file_asset(doc.file_asset)
+        else:
+            doc.delete()
+        return success_response(message="Document deleted", data=None)
 
 
 class ComponentReviewListView(APIView):
@@ -81,8 +261,12 @@ class PublicComponentListView(APIView):
             )
 
         ordering = params.get("ordering", "-created_at")
-        if ordering in ["-created_at", "name", "-avg_rating", "typical_lead_time_days"]:
-            components = components.order_by(ordering)
+        if ordering == "-avg_rating":
+            components = components.order_by(F("avg_rating").desc(nulls_last=True), "id")
+        elif ordering in ("-created_at", "name", "typical_lead_time_days"):
+            components = components.order_by(ordering, "id")
+        else:
+            components = components.order_by("-created_at", "id")
 
         paginator = StandardPagination()
         page = paginator.paginate_queryset(components, request)
@@ -99,8 +283,10 @@ class PublicComponentListView(APIView):
 
 class MyComponentListCreateView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdminOrSuperuser,]
-
+   
     def get(self, request):
+        if not request.user.organization:
+            return error_response("Your account is not linked to an organization", status_code=400)
         components = Component.objects.filter(organization=request.user.organization).order_by("-created_at")
         return success_response(message="Components fetched", data=ComponentSerializer(components, many=True).data)
 
@@ -133,86 +319,22 @@ class MyComponentDetailView(APIView):
         serializer.save()
         return success_response(message="Component updated", data=serializer.data)
 
+
     def delete(self, request, component_id):
         component = self.get_object(request, component_id)
-        component.delete()
+        keys = list(FileAsset.objects.filter(component=component).values_list("object_key", flat=True))
+
+        def remove_objects():
+            for key in keys:
+                try:
+                    s3.delete_object(key)
+                except Exception:
+                    pass   # a leftover object is picked up by cleanup_uploads
+
+        with transaction.atomic():
+            component.delete()
+            transaction.on_commit(remove_objects)
         return success_response(message="Component deleted", data=None)
-
-
-# ---------- Component Images (Company Admin, own org only) ----------
-
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
-
-class ComponentImageListCreateView(APIView):
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
-
-    def get(self, request, component_id):
-        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
-        return success_response(
-            data=ComponentImageSerializer(component.images.all(), many=True, context={"request": request}).data
-        )
-
-    def post(self, request, component_id):
-        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
-        serializer = ComponentImageSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        image = serializer.save(component=component, uploaded_by=request.user)
-        return success_response(
-            message="Image uploaded successfully",
-            data=ComponentImageSerializer(image, context={"request": request}).data,
-            status_code=201,
-        )
-
-
-class ComponentImageDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
-
-    def delete(self, request, component_id, image_id):
-        image = get_object_or_404(
-            ComponentImage, id=image_id, component_id=component_id,
-            component__organization=request.user.organization,
-        )
-        image.image.delete(save=False)   # works for local + S3
-        image.delete()
-        return success_response(message="Image deleted", data=None)
-
-# ---------- Component Documents (Company Admin, own org only) ----------
-class ComponentDocumentListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, component_id):
-        component = get_object_or_404(Component, id=component_id)
-        docs = visible_documents(component, request.user)
-        return success_response(data=ComponentDocumentSerializer(docs, many=True).data)
-
-    def post(self, request, component_id):
-        component = get_object_or_404(Component, id=component_id, organization=request.user.organization)
-        if not has_role(request.user, "company_admin"):
-            return success_response(message="Only Company Admin can upload documents", data=None, status_code=403)
-
-        serializer = ComponentDocumentSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        doc = serializer.save(component=component, uploaded_by=request.user)
-        return success_response(
-            message="Document uploaded successfully",
-            data=ComponentDocumentSerializer(doc).data,
-            status_code=201,
-        )
-
-
-class ComponentDocumentDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
-
-    def delete(self, request, component_id, document_id):
-        doc = get_object_or_404(
-            ComponentDocument, id=document_id, component_id=component_id,
-            component__organization=request.user.organization,
-        )
-        doc.file.delete(save=False)   # works for local + S3
-        doc.delete()
-        return success_response(message="Document deleted", data=None)
 
 class DocumentAccessListGrantView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdmin]
@@ -223,7 +345,7 @@ class DocumentAccessListGrantView(APIView):
             ComponentDocument, id=document_id,
             component__organization=request.user.organization,
         )
-        grants = document.access_grants.filter(is_revoked=False)
+        grants = document.access_grants.filter(is_revoked=False).select_related("granted_to_organization", "rfq")
         data = [
             {
                 "organization_id": str(g.granted_to_organization_id),
@@ -233,6 +355,7 @@ class DocumentAccessListGrantView(APIView):
                 "keep_until_completion": g.keep_until_completion,
                 "granted_at": g.granted_at,
                 "decided_at": g.decided_at,
+                "rfq_number": g.rfq.rfq_number if g.rfq else None,
             }
             for g in grants
         ]
@@ -277,12 +400,13 @@ class DocumentAccessActionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, document_id):
-        org_id = request.data.get("organization_id")
-        action = request.data.get("action")  # "confirm", "reject", "revoke", "keep_until_completion"
-
-        if not org_id or not action:
-            return success_response(message="organization_id and action are required", data=None, status_code=400)
-
+        action = request.data.get("action")
+        try:
+            org_id = uuid.UUID(str(request.data.get("organization_id")))
+        except ValueError:
+            return error_response("A valid organization_id is required", status_code=400)
+        if not action:
+            return error_response("action is required", status_code=400)
         access = get_object_or_404(
             ComponentDocumentAccess,
             document_id=document_id,

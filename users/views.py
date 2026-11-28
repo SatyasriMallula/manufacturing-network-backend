@@ -11,6 +11,11 @@ from core.responses import success_response,error_response
 from .models import User  
 import uuid
 from core.pagination import StandardPagination
+from rest_framework.permissions import AllowAny
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.throttling import ScopedRateThrottle
+
 
 def set_auth_cookies(response,access,refresh):
     response.set_cookie(
@@ -33,7 +38,8 @@ def set_auth_cookies(response,access,refresh):
 
 class LoginView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
-
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -51,6 +57,8 @@ class LoginView(TokenObtainPairView):
     
     
 class RefreshView(APIView):
+    authentication_classes = []      
+    permission_classes = [AllowAny] 
     def post(self, request):
         refresh_token = request.COOKIES.get(
             settings.AUTH_COOKIE_REFRESH
@@ -89,8 +97,8 @@ class RefreshView(APIView):
 
 
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-    
+    authentication_classes = []
+    permission_classes = [AllowAny]    
     def post(self, request):
         refresh_token = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH)
         if refresh_token:
@@ -183,3 +191,24 @@ class StaffListView(APIView):
             data=serializer.data,
 
         )
+
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        old = request.data.get("old_password") or ""
+        new = request.data.get("new_password") or ""
+        user = request.user
+
+        if not user.check_password(old):
+            return error_response("Current password is incorrect", status_code=400)
+        try:
+            validate_password(new, user=user)
+        except DjangoValidationError as exc:
+            return error_response("Choose a stronger password", errors={"new_password": list(exc.messages)}, status_code=400)
+
+        user.set_password(new)
+        user.save(update_fields=["password"])
+        return success_response(message="Password changed", data=None)

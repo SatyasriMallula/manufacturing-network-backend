@@ -74,9 +74,24 @@ DB_USER=postgres
 DB_PASSWORD=your_postgres_password
 DB_HOST=localhost
 DB_PORT=5432
+USE_S3=True
+AWS_STORAGE_BUCKET_NAME=your-private-s3-bucket
+AWS_S3_REGION_NAME=ap-southeast-2
 ```
 
 Never commit `.env` to Git.
+
+When `USE_S3=True`, Django's default file storage and the upload API both use S3. AWS credentials are read from the standard AWS credential chain (for example, an AWS profile locally or an IAM role in production). Configure the bucket's CORS policy to allow the frontend origin to send `PUT` requests with the `Content-Type` header.
+
+### S3 file upload flow
+
+1. Call `POST /api/v1/uploads/presign/` with the `entity_type`, `entity_id`, `category`, `filename`, `content_type`, and `size_bytes`.
+2. Upload the bytes directly to the returned `upload_url` using `PUT` and the returned headers.
+3. Call `POST /api/v1/uploads/complete/` with the returned `object_key` and `upload_token`.
+4. For component images/documents and RFQ attachments, attach the resulting `file_asset_id` through the corresponding component or RFQ endpoint. For quotes, orders, invoices, and organization files, the completed asset is already associated with that entity.
+5. List, download, or delete files through `/api/v1/uploads/`.
+
+The `entity_type` values are `component`, `rfq`, `quote`, `order`, `invoice`, and `organization`. The API validates categories, ownership, file size, and file type for each entity.
 
 ### 6. Run migrations and start the server
 

@@ -11,10 +11,25 @@ from decimal import Decimal
 from .models import RFQ, RFQRecipient, RFQAttachment, Quote
 
 class RFQAttachmentSerializer(serializers.ModelSerializer):
+    file_asset_id = serializers.UUIDField(read_only=True)
+    filename = serializers.SerializerMethodField()
+    size_bytes = serializers.SerializerMethodField()
+
     class Meta:
         model = RFQAttachment
-        fields = ["id", "file", "title", "created_at"]
+        fields = ["id", "file_asset_id", "filename", "size_bytes", "title", "created_at"]
         read_only_fields = ["id", "created_at"]
+
+    def get_filename(self, obj):
+        return obj.file_asset.original_filename if obj.file_asset_id else None
+
+    def get_size_bytes(self, obj):
+        return obj.file_asset.size_bytes if obj.file_asset_id else None
+
+
+class RFQAttachmentCreateSerializer(serializers.Serializer):
+    file_asset_id = serializers.UUIDField()
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
 
 
 class RFQRecipientSerializer(serializers.ModelSerializer):

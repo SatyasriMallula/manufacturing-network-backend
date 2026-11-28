@@ -8,7 +8,11 @@ from core.responses import success_response
 from core.pagination import StandardPagination
 from core.permissions import has_role, BUYER_ROLES, VENDOR_ROLES
 from .models import RFQ, RFQRecipient, RFQAttachment, Quote
-from .serializers import RFQSerializer, RFQAttachmentSerializer, QuoteSerializer
+from .serializers import (
+    RFQSerializer, RFQAttachmentSerializer, RFQAttachmentCreateSerializer, QuoteSerializer,
+)
+from uploads.models import FileAsset
+from uploads.services import delete_file_asset
 import uuid
 from datetime import date
 from orders.services import create_order_from_award
@@ -41,7 +45,9 @@ class RFQListCreateView(APIView):
         rfqs = (
             rfqs_visible_to(request.user)
             .select_related("buyer_organization")
-            .prefetch_related("recipients__vendor_organization", "recipients__component", "attachments")
+            .prefetch_related(
+                "recipients__vendor_organization", "recipients__component", "attachments__file_asset",
+            )
         )
         org = request.user.organization
         params = request.query_params
@@ -159,9 +165,30 @@ class RFQAttachmentCreateView(APIView):
         if rfq.status not in (RFQ.Status.DRAFT, RFQ.Status.OPEN):
             return success_response(message="Attachments can only be added to draft or open RFQs", data=None, status_code=400)
 
-        serializer = RFQAttachmentSerializer(data=request.data)
+        serializer = RFQAttachmentCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        attachment = serializer.save(rfq=rfq, uploaded_by=request.user)
+        data = serializer.validated_data
+        asset = FileAsset.objects.active().exclude(
+            scan_status=FileAsset.ScanStatus.REJECTED
+        ).filter(
+            id=data["file_asset_id"],
+            organization=request.user.organization,
+            rfq=rfq,
+            category__in=(
+                FileAsset.Category.RFQ_ATTACHMENT,
+                FileAsset.Category.DRAWING,
+                FileAsset.Category.SPECIFICATION,
+                FileAsset.Category.OTHER,
+            ),
+        ).first()
+        if asset is None:
+            return success_response(message="File not found for this RFQ", data=None, status_code=400)
+        if RFQAttachment.objects.filter(file_asset=asset).exists():
+            return success_response(message="This file is already attached", data=None, status_code=400)
+
+        attachment = RFQAttachment.objects.create(
+            rfq=rfq, uploaded_by=request.user, file_asset=asset, title=data["title"],
+        )
         return success_response(
             message="Attachment uploaded",
             data=RFQAttachmentSerializer(attachment).data,
@@ -182,8 +209,10 @@ class RFQAttachmentDeleteView(APIView):
         if attachment.rfq.status != RFQ.Status.DRAFT:
             return success_response(message="Attachments can only be removed while the RFQ is a draft", data=None, status_code=400)
 
-        attachment.file.delete(save=False)
-        attachment.delete()
+        if attachment.file_asset_id:
+            delete_file_asset(attachment.file_asset)
+        else:
+            attachment.delete()
         return success_response(message="Attachment deleted", data=None)
 
 

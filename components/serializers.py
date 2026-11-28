@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.db.models import Avg, Count
-from .models import Component, ComponentImage, ComponentDocument
+from .models import Component, ComponentDocument
 from orders.models import OrderReview
 
 
@@ -48,41 +48,20 @@ class ComponentSerializer(serializers.ModelSerializer):
         return _review_stats(obj)["n"]
 
 
-class ComponentImageSerializer(serializers.ModelSerializer):
-    image_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ComponentImage
-        fields = ["id", "image", "image_url", "is_primary", "display_order", "created_at"]
-        read_only_fields = ["id", "created_at"]
-
-    def get_image_url(self, obj):
-        if not obj.image:
-            return None
-        url = obj.image.url
-        request = self.context.get("request")
-        return request.build_absolute_uri(url) if request else url
-
-
-class ComponentDocumentSerializer(serializers.ModelSerializer):
-    file_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ComponentDocument
-        fields = ["id", "file", "file_url", "doc_type", "title", "created_at"]
-        read_only_fields = ["id", "created_at"]
-
-    def get_file_url(self, obj):
-        if not obj.file:
-            return None
-        url = obj.file.url
-        request = self.context.get("request")
-        return request.build_absolute_uri(url) if request else url
-
-
 class SubmitComponentReviewSerializer(serializers.Serializer):
     rating = serializers.IntegerField(min_value=1, max_value=5)
     quality_rating = serializers.IntegerField(min_value=1, max_value=5, required=False)
     accuracy_rating = serializers.IntegerField(min_value=1, max_value=5, required=False)
     delivery_rating = serializers.IntegerField(min_value=1, max_value=5, required=False)
     comment = serializers.CharField(required=False, allow_blank=True)
+
+class AttachImageSerializer(serializers.Serializer):
+    file_asset_id = serializers.UUIDField()
+    is_primary = serializers.BooleanField(required=False, default=False)
+    display_order = serializers.IntegerField(required=False, min_value=0, default=0)
+
+
+class AttachDocumentSerializer(serializers.Serializer):
+    file_asset_id = serializers.UUIDField()
+    doc_type = serializers.ChoiceField(choices=ComponentDocument.DocType.choices)
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")

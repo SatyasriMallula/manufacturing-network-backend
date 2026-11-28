@@ -59,23 +59,14 @@ class ComponentImage(models.Model):
     component = models.ForeignKey(Component, on_delete=models.CASCADE, related_name="images")
     uploaded_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True)
 
-    original_filename = models.CharField(max_length=255)
-    storage_key = models.CharField(max_length=500)          # original, full-size image in S3
-    thumbnail_key = models.CharField(max_length=500, blank=True)  # small, for grid views
-    medium_key = models.CharField(max_length=500, blank=True)     # medium, for detail page
-    image = models.ImageField(upload_to="products/images/",null=True, blank=True)  # the actual image file (used for local storage)
-
-
-    file_size_bytes = models.BigIntegerField(null=True)
-    width = models.PositiveIntegerField(null=True)
-    height = models.PositiveIntegerField(null=True)
-
     is_primary = models.BooleanField(default=False)   # the "main" image shown in listings
     display_order = models.PositiveIntegerField(default=0)
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.UPLOADING)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    file_asset = models.OneToOneField(
+    "uploads.FileAsset", on_delete=models.SET_NULL, null=True, blank=True, related_name="component_image"
+)
     class Meta:
         db_table = "component_images"
         ordering = ["display_order", "created_at"]
@@ -101,15 +92,12 @@ class ComponentDocument(models.Model):
     uploaded_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True)
 
     doc_type = models.CharField(max_length=20, choices=DocType.choices)
-    original_filename = models.CharField(max_length=255)
-    storage_key = models.CharField(max_length=500)   # the S3 path, e.g. "products/{product_id}/docs/{uuid}.pdf"
-    file_size_bytes = models.BigIntegerField(null=True)
-    content_type = models.CharField(max_length=100, blank=True)
-    file = models.FileField(upload_to="products/docs/",null=True, blank=True)  # the actual file (used for local storage)
     title = models.CharField(max_length=200, blank=True)
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.UPLOADING)
-
+    file_asset = models.OneToOneField(
+    "uploads.FileAsset", on_delete=models.SET_NULL, null=True, blank=True, related_name="component_document"
+)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
