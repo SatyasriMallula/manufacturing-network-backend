@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path
-from users.views import LoginView, RefreshView, LogoutView, MeView, AddStaffView,StaffListView
+from users.views import ChangePasswordView, LoginView, RefreshView, LogoutView, MeView, AddStaffView,StaffListView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -10,5 +10,6 @@ urlpatterns = [
     path("auth/me/", MeView.as_view(), name="me"),
     path("staff/add/", AddStaffView.as_view(), name="add-staff"),
     path("staff/", StaffListView.as_view(), name="staff-list"),
+    path("auth/password/change/", ChangePasswordView.as_view(), name="password-change"),
 
 ]

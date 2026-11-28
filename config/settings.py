@@ -43,20 +43,36 @@ SIMPLE_JWT = {
 USE_S3 = env.bool("USE_S3", default=False)
 
 if USE_S3:
-    AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
-    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
     AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
-    AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="us-east-1")
+    AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="ap-southeast-2")
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = True
 
-    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
     MEDIA_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/"
 else:
-    DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
     MEDIA_URL = "/media/"
     MEDIA_ROOT = BASE_DIR / "media"
+
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "storages.backends.s3boto3.S3Boto3Storage"
+            if USE_S3
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+MB = 1024 * 1024
+UPLOAD_URL_EXPIRY_SECONDS = env.int("UPLOAD_URL_EXPIRY_SECONDS", default=900)       # 15 min
+DOWNLOAD_URL_EXPIRY_SECONDS = env.int("DOWNLOAD_URL_EXPIRY_SECONDS", default=300)   # 5 min
+UPLOAD_MAX_FILES_PER_REQUEST = 10
+UPLOAD_MAX_BYTES = {"image": 10 * MB, "document": 50 * MB, "cad": 100 * MB}
+
 # ------------------------------------------------------------------
 # Applications
 # ------------------------------------------------------------------
@@ -82,9 +98,11 @@ INSTALLED_APPS = [
     "orders",
     "notifications",
     "billing",
+    "uploads",
 ]
 
 REST_FRAMEWORK = {
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "password_change": "5/min"},
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "users.authentication.CookieJWTAuthentication",
     ),
@@ -110,7 +128,7 @@ MIDDLEWARE = [
 # ------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:3000"],
+    default=["http://localhost:3000","https://mfg-nexus-frontend.vercel.app"],
     
 )
 CSRF_TRUSTED_ORIGINS = env.list(

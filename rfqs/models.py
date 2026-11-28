@@ -126,7 +126,9 @@ class RFQAttachment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name="attachments")
     uploaded_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True)
-    file = models.FileField(upload_to=rfq_attachment_path)
+    file_asset = models.OneToOneField(
+        "uploads.FileAsset", on_delete=models.SET_NULL, null=True, blank=True, related_name="rfq_attachment"
+    )
     title = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

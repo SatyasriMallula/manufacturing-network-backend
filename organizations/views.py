@@ -1,5 +1,5 @@
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -15,8 +15,12 @@ from .serializers import (
 
 
 class OrganizationListCreateView(APIView):
-    """Super Admin only: list all orgs, create a new org."""
-    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    """GET: Super Admin only (list all orgs). POST: open (organization registration)."""
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), IsSuperAdmin()]
+        return [AllowAny()]
 
     def get(self, request):
         organizations = Organization.objects.all().order_by("-created_at")
@@ -32,7 +36,6 @@ class OrganizationListCreateView(APIView):
             data=OrganizationSerializer(organization).data,
             status_code=201,
         )
-
 
 class OrganizationDetailView(APIView):
     """Any logged-in user: public profile — name, components, rating.

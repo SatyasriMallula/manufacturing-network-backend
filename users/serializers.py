@@ -3,6 +3,7 @@ from django.contrib.auth.models import Group
 from rest_framework import serializers
 from .models import User
 from organizations.models import Organization
+from core.validators import validate_password_strength   
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
@@ -59,6 +60,9 @@ class AddStaffSerializer(serializers.Serializer):
             attrs["organization_obj"] = requesting_user.organization  # input ignored
 
         return attrs
+    
+    def validate_password(self, value):
+        return validate_password_strength(value)
 
     def create(self, validated_data):
         user = User.objects.create_user(
