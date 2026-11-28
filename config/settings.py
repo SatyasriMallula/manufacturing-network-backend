@@ -128,12 +128,12 @@ MIDDLEWARE = [
 # ------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:3000","https://mfg-nexus-frontend.vercel.app"],
+    default=["http://localhost:3000","https://mfg-nexus-frontend.vercel.app","https://holonic.store",],
     
 )
 CSRF_TRUSTED_ORIGINS = env.list(
     "CSRF_TRUSTED_ORIGINS",
-    default=["http://localhost:3000"],
+    default=["http://localhost:3000","https://holonic.store",],
 )
 CORS_ALLOW_CREDENTIALS = True
 
